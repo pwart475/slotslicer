@@ -158,10 +158,13 @@ kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2p
   <section class="card">
     <h2>預覽</h2>
     <div class="flexbar" style="margin-bottom:10px">
-      <input type="text" id="sample" value="1,234,567" style="width:180px">
+      <input type="text" id="sample" value="1,234,567" style="width:170px">
+      <button class="mini" id="sampleAll" title="把所有字元填進來，微調任何一個字都看得到">全部字元</button>
       <span class="stat">字距</span><input type="number" id="tracking" value="0" style="width:60px">
       <span class="stat">縮放</span><input type="range" id="pzoom" min="25" max="300" value="100"><span class="chip" id="pzoomV">100%</span>
       <span class="stat">背景</span><input type="color" id="bgc" value="#1b2b3a">
+      <span class="stat">對齊</span>
+      <select id="palign"><option value="center" selected>置中</option><option value="left">靠左</option><option value="right">靠右</option></select>
       <button class="mini" id="tglBox">字格框線</button>
       <button class="mini" id="tglBase">基線</button>
       <button class="mini" id="tglRoll">滾分模擬</button>
@@ -547,8 +550,8 @@ function drawTable(){
     tb.appendChild(tr);
   });
   tb.querySelectorAll('input').forEach(inp=>{
-    inp.onfocus = ()=>{ S.hl = +inp.dataset.i; drawTune(); };
-    inp.onblur  = ()=>{ S.hl = -1; drawTune(); };
+    inp.onfocus = ()=>{ S.hl = +inp.dataset.i; drawTune(); drawPreviewOnce(); };
+    inp.onblur  = ()=>{ S.hl = -1; drawTune(); drawPreviewOnce(); };
     inp.oninput = ()=>{
       const g=S.glyphs[+inp.dataset.i], k=inp.dataset.k;
       if(k==='name'){ g.name = inp.value; }
@@ -646,6 +649,8 @@ window.addEventListener('resize',()=>{ if(S.glyphs.length) drawTune(); });
 /* ============================== 預覽 ============================== */
 $('pzoom').oninput = e=>{ $('pzoomV').textContent=e.target.value+'%'; drawPreviewOnce(); };
 ['sample','tracking'].forEach(id=>$(id).oninput=drawPreviewOnce);
+$('palign').onchange = drawPreviewOnce;
+$('sampleAll').onclick = ()=>{ $('sample').value = S.glyphs.map(g=>g.ch).join(''); drawPreviewOnce(); };
 $('bgc').oninput = ()=>{ drawPreviewOnce(); drawTune(); };
 $('tglBox').onclick = e=>{S.showBox=!S.showBox; e.target.classList.toggle('on',S.showBox); drawPreviewOnce();};
 $('tglBase').onclick = e=>{S.showBase=!S.showBase; e.target.classList.toggle('on',S.showBase); drawPreviewOnce();};
@@ -662,54 +667,66 @@ function drawPreviewOnce(){
   const txt=$('sample').value, tr=+$('tracking').value||0;
   if(!S.glyphs.length){ cv.width=10;cv.height=10; return; }
 
-  const gcv=glyphCanvas;
+  // 十個數字的字格（滾動時會用到）
+  const digitG='0123456789'.split('').map(d=>findGlyph(d));
+  const digitC=digitG.map(g=>g?glyphCanvas(g):null);
+  const liveC=digitC.filter(Boolean);
+  const maxDigitW = liveC.length?Math.max(...liveC.map(c=>c.width)):1;
 
-  const items=[]; let totalW=0, maxH=0;
+  const t=(performance.now()-S.rollT0)%3200, SPEED=0.010;
+
+  // 逐格決定「這一幀要顯示哪個字」，寬度跟著當下顯示的字走 → 不等寬會左右跳
+  let di=0, maxH=0;
+  const items=[];
   for(const ch of txt){
-    if(ch===' '){ const w=Math.round((+$('cellW').value||20)*0.5); items.push({space:true,w}); totalW+=w+tr; continue; }
-    const g=findGlyph(ch); if(!g){ items.push({miss:true,w:12,ch}); totalW+=12+tr; continue; }
-    const c=gcv(g); items.push({g,c,w:c.width}); totalW+=c.width+tr; maxH=Math.max(maxH,c.height);
+    if(ch===' '){ const w=Math.round((+$('cellW').value||20)*0.5); items.push({space:true,w,resv:w}); continue; }
+    const g=findGlyph(ch);
+    if(!g){ items.push({miss:true,w:12,resv:12,ch}); continue; }
+    let spin=null;
+    if(S.roll && /^[0-9]$/.test(ch)){
+      const stopAt=700+di*160; di++;
+      if(t<stopAt){ const n=Math.floor(t*SPEED);
+        spin={phase:(t*SPEED)%1, a:n%10, b:(n+1)%10}; }
+    }
+    const c = spin ? (digitC[spin.a]||glyphCanvas(g)) : glyphCanvas(g);
+    maxH=Math.max(maxH,c.height);
+    items.push({g,c,w:c.width,resv: spin?maxDigitW:c.width, spin});
   }
-  totalW = Math.max(1,totalW-tr);
+
+  // resv = 預留寬（用最寬的數字算），避免畫布每幀改大小造成頁面抖動
+  const n=items.length, gaps=Math.max(0,n-1)*tr;
+  const totalW=Math.max(1,items.reduce((s,i)=>s+i.w,0)+gaps);
+  const resvW =Math.max(1,items.reduce((s,i)=>s+i.resv,0)+gaps);
+
   const PAD=20;
-  cv.width = totalW+PAD*2; cv.height = (maxH||20)+PAD*2;
+  cv.width=resvW+PAD*2; cv.height=(maxH||20)+PAD*2;
   ctx.fillStyle=$('bgc').value; ctx.fillRect(0,0,cv.width,cv.height);
 
-  // 滾分狀態
-  const now=performance.now(), el=now-S.rollT0, CYC=3200;
-  const t=el%CYC;
-  let digitIdx=0;
-  const digitsCv = '0123456789'.split('').map(d=>{const g=findGlyph(d); return g?gcv(g):null;});
+  const al=$('palign').value;
+  let pen = PAD + (al==='center' ? Math.round((resvW-totalW)/2) : al==='right' ? (resvW-totalW) : 0);
 
-  let pen=PAD;
-  for(const it of items){
-    if(it.space){ pen+=it.w+tr; continue; }
+  items.forEach((it,i)=>{
+    if(i) pen+=tr;
+    if(it.space){ pen+=it.w; return; }
     if(it.miss){
-      ctx.strokeStyle='#ff6b6b'; ctx.strokeRect(pen+.5,PAD+.5,it.w-1,(maxH||20)-1);
+      ctx.strokeStyle='#ff6b6b'; ctx.lineWidth=1; ctx.strokeRect(pen+.5,PAD+.5,it.w-1,(maxH||20)-1);
       ctx.fillStyle='#ff6b6b'; ctx.font='10px monospace'; ctx.fillText(it.ch,pen+2,PAD+12);
-      pen+=it.w+tr; continue;
+      pen+=it.w; return;
     }
-    const isDigit=/^[0-9]$/.test(it.g.ch);
-    let drawn=false;
-    if(S.roll && isDigit){
-      const stopAt = 700 + digitIdx*160;
-      digitIdx++;
-      if(t < stopAt){
-        const speed=0.010;
-        const phase=(t*speed)%1;
-        const base=Math.floor(t*speed)%10;
-        const a=digitsCv[base], b=digitsCv[(base+1)%10];
-        const H=it.c.height;
-        ctx.save(); ctx.beginPath(); ctx.rect(pen,PAD,it.w,H); ctx.clip();
-        if(a) ctx.drawImage(a, pen + (it.w-a.width)/2, PAD - phase*H);
-        if(b) ctx.drawImage(b, pen + (it.w-b.width)/2, PAD + (1-phase)*H);
-        ctx.restore(); drawn=true;
-      }
-    }
-    if(!drawn) ctx.drawImage(it.c, pen, PAD);
+    if(it.spin){
+      const H=it.c.height, a=digitC[it.spin.a], b=digitC[it.spin.b];
+      ctx.save(); ctx.beginPath(); ctx.rect(0,PAD,cv.width,H); ctx.clip();   // 只在垂直方向裁切
+      if(a) ctx.drawImage(a, pen, PAD - it.spin.phase*H);
+      if(b) ctx.drawImage(b, pen + Math.round((it.w-b.width)/2), PAD + (1-it.spin.phase)*H);
+      ctx.restore();
+    } else ctx.drawImage(it.c, pen, PAD);
     if(S.showBox){ ctx.strokeStyle='#3fb6a8aa'; ctx.lineWidth=1; ctx.strokeRect(pen+.5,PAD+.5,it.w-1,it.c.height-1); }
-    pen+=it.w+tr;
-  }
+    if(S.hl>=0 && it.g===S.glyphs[S.hl]){   // 表格裡正在編輯的字，這裡也框起來
+      ctx.strokeStyle='#ff7a2f'; ctx.lineWidth=2; ctx.strokeRect(pen+1,PAD+1,it.w-2,it.c.height-2);
+    }
+    pen+=it.w;
+  });
+
   if(S.showBase){
     const by=PAD+baselineInCell();
     ctx.strokeStyle='#ffcc4d'; ctx.setLineDash([5,4]); ctx.beginPath();
@@ -718,9 +735,11 @@ function drawPreviewOnce(){
   const z=+$('pzoom').value/100;
   cv.style.width=(cv.width*z)+'px'; cv.style.height=(cv.height*z)+'px';
 
-  const widths=[...new Set(items.filter(i=>i.g&&/^[0-9]$/.test(i.g.ch)).map(i=>i.w))];
+  const widths=[...new Set(liveC.map(c=>c.width))].sort((a,b)=>a-b);
+  const jitter = widths.length>1;
   $('previewInfo').innerHTML = `整串 ${totalW} px · 字高 ${maxH} px · 數字畫布寬 ${widths.join(' / ')||'-'} px`
-    + (S.mode==='mono' && widths.length>1 ? ' <span class="err">⚠ 數字寬度不一致，滾分會抽動</span>' : '');
+    + (jitter && S.mode==='mono' ? ' <span class="err">⚠ 等寬模式下數字寬度卻不一致，滾分會抽動</span>' : '')
+    + (jitter && S.mode!=='mono' ? ` <span style="color:var(--warn)">滾分時整串會左右跳動 ±${widths[widths.length-1]-widths[0]} px</span>` : '');
 }
 
 /* ============================== 參數綁定 ============================== */
