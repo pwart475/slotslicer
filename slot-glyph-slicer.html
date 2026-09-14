@@ -37,6 +37,8 @@ button.primary{background:var(--acc);border-color:var(--acc);color:#1a1206;font-
 button.primary:hover{filter:brightness(1.12)}
 button.on{background:var(--acc2);border-color:var(--acc2);color:#08201d;font-weight:700}
 button.mini{padding:2px 7px;font-size:11px}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:disabled:hover{border-color:var(--line);color:var(--fg)}
 .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{border:0;border-radius:0;flex:1;padding:7px 4px}
 .seg button.on{background:var(--acc);color:#1a1206}
@@ -655,9 +657,20 @@ $('bgc').oninput = ()=>{ drawPreviewOnce(); drawTune(); };
 $('tglBox').onclick = e=>{S.showBox=!S.showBox; e.target.classList.toggle('on',S.showBox); drawPreviewOnce();};
 $('tglBase').onclick = e=>{S.showBase=!S.showBase; e.target.classList.toggle('on',S.showBase); drawPreviewOnce();};
 $('tglRoll').onclick = e=>{
+  if(S.mode!=='mono') return;
   S.roll=!S.roll; e.target.classList.toggle('on',S.roll);
   if(S.roll){ S.rollT0=performance.now(); loopRoll(); } else { cancelAnimationFrame(S.raf); drawPreviewOnce(); }
 };
+/* 滾分只在等寬模式有意義：不等寬時數字寬度不一，整串會左右抽動，實務上不會這樣用 */
+function updateRollAvail(){
+  const ok = S.mode==='mono';
+  const b=$('tglRoll');
+  b.disabled = !ok;
+  b.title = ok ? '' : '滾分只能用等寬模式：不等寬時數字寬度不一，整串會左右抽動';
+  if(!ok && S.roll){
+    S.roll=false; b.classList.remove('on'); cancelAnimationFrame(S.raf);
+  }
+}
 function loopRoll(){ drawPreviewOnce(); S.raf = requestAnimationFrame(loopRoll); }
 
 function findGlyph(ch){ return S.glyphs.find(g=>g.ch===ch); }
@@ -739,7 +752,7 @@ function drawPreviewOnce(){
   const jitter = widths.length>1;
   $('previewInfo').innerHTML = `整串 ${totalW} px · 字高 ${maxH} px · 數字畫布寬 ${widths.join(' / ')||'-'} px`
     + (jitter && S.mode==='mono' ? ' <span class="err">⚠ 等寬模式下數字寬度卻不一致，滾分會抽動</span>' : '')
-    + (jitter && S.mode!=='mono' ? ` <span style="color:var(--warn)">滾分時整串會左右跳動 ±${widths[widths.length-1]-widths[0]} px</span>` : '');
+    + (S.mode!=='mono' ? ' <span style="color:var(--warn)">不等寬模式不支援滾分（數字寬度不一，整串會左右抽動）</span>' : '');
 }
 
 /* ============================== 參數綁定 ============================== */
@@ -769,6 +782,7 @@ document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
 
 function refreshAll(){
   S.cache.clear();
+  updateRollAvail();
   drawBoxes(); drawTable(); fillRefSelect(); drawTune(); drawPreviewOnce();
   const d0=S.glyphs.find(g=>/^[0-9]$/.test(g.ch));
   const fin=d0?cellSize(d0):null;
