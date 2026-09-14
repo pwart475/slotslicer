@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SLOT 美術字切圖工具</title>
+<style>
+:root{
+  --bg:#14171c; --panel:#1c2128; --panel2:#232a33; --line:#333c47;
+  --fg:#e6ebf2; --dim:#8d99a8; --acc:#ff7a2f; --acc2:#3fb6a8; --warn:#ffcc4d;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);font:13px/1.5 "Segoe UI","Microsoft JhengHei",system-ui,sans-serif}
+h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px}
+h2{font-size:12px;margin:0 0 8px;color:var(--acc);text-transform:uppercase;letter-spacing:1px;font-weight:700}
+header{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header .sub{color:var(--dim);font-size:12px}
+header .spacer{flex:1}
+.app{display:grid;grid-template-columns:290px 1fr;height:calc(100% - 45px)}
+aside{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:14px}
+main{overflow:auto;padding:14px 18px}
+section.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+.grp{margin-bottom:18px}
+.row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.row label{flex:1;color:var(--dim)}
+input[type=number],input[type=text],select{background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+  border-radius:5px;padding:4px 6px;font:inherit}
+input[type=number]{width:74px;text-align:right}
+input[type=text]{width:100%}
+input[type=range]{width:130px;accent-color:var(--acc)}
+input[type=color]{background:none;border:1px solid var(--line);border-radius:5px;width:34px;height:26px;padding:1px}
+button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:5px;
+  padding:6px 11px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc);color:#fff}
+button.primary{background:var(--acc);border-color:var(--acc);color:#1a1206;font-weight:700}
+button.primary:hover{filter:brightness(1.12)}
+button.on{background:var(--acc2);border-color:var(--acc2);color:#08201d;font-weight:700}
+button.mini{padding:2px 7px;font-size:11px}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;flex:1;padding:7px 4px}
+.seg button.on{background:var(--acc);color:#1a1206}
+#drop{border:2px dashed var(--line);border-radius:10px;padding:34px;text-align:center;color:var(--dim);cursor:pointer}
+#drop.hot{border-color:var(--acc);color:var(--acc);background:#ff7a2f11}
+.canvasWrap{background:
+   linear-gradient(45deg,#2a2f37 25%,transparent 25%,transparent 75%,#2a2f37 75%),
+   linear-gradient(45deg,#2a2f37 25%,#232830 25%,#232830 75%,#2a2f37 75%);
+  background-size:16px 16px;background-position:0 0,8px 8px;
+  border:1px solid var(--line);border-radius:6px;overflow:auto;position:relative;padding:0}
+#detectHost{position:relative;display:inline-block;transform-origin:0 0}
+#detectHost canvas{display:block;image-rendering:pixelated}
+#boxes{position:absolute;inset:0;pointer-events:none}
+.bx{position:absolute;border:1px solid var(--acc2);background:#3fb6a815;pointer-events:auto;cursor:pointer}
+.bx.sel{border-color:var(--acc);background:#ff7a2f22;box-shadow:0 0 0 1px var(--acc)}
+.bx span{position:absolute;top:-16px;left:0;font-size:10px;color:var(--acc2);background:#000a;padding:0 3px;border-radius:3px;white-space:nowrap}
+.bx.sel span{color:var(--acc)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+td input[type=number]{width:56px;padding:2px 4px}
+td input[type=text]{width:96px;padding:2px 4px}
+tr.sel td{background:#ff7a2f14}
+tr.dup td{background:#ff4d4d1f}
+.chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+  padding:1px 6px;font-family:Consolas,monospace}
+.hint{color:var(--dim);font-size:11px;margin-top:6px;line-height:1.6}
+.err{color:#ff6b6b}
+.ok{color:var(--acc2)}
+#previewWrap{border:1px solid var(--line);border-radius:6px;overflow:auto;padding:16px;text-align:left}
+#previewCv{display:block;image-rendering:pixelated}
+.flexbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.stat{color:var(--dim);font-size:11px}
+kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:11px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SLOT 美術字切圖工具</h1>
+  <span class="sub">PS 一行字條 → 一張一張 PNG</span>
+  <span class="spacer"></span>
+  <span class="stat" id="statusBar">尚未載入圖片</span>
+</header>
+
+<div class="app">
+<aside>
+
+  <div class="grp">
+    <h2>1 · 來源圖</h2>
+    <div id="drop">拖曳 PNG 到這裡<br><span style="font-size:11px">或點擊選檔 / 直接 <kbd>Ctrl</kbd>+<kbd>V</kbd> 貼上</span></div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <div class="hint" id="imgInfo"></div>
+    <div class="flexbar" style="margin-top:6px"><button class="mini" id="demoBtn">載入內建測試圖</button></div>
+    <div class="row" style="margin-top:8px"><label>行 (多行圖用)</label><select id="rowSel"></select></div>
+  </div>
+
+  <div class="grp">
+    <h2>2 · 自動偵測</h2>
+    <div class="row"><label>Alpha 閾值</label><input type="range" id="alphaTh" min="1" max="128" value="10"><span class="chip" id="alphaThV">10</span></div>
+    <div class="row"><label>最小字間隙 px</label><input type="number" id="minGap" value="4" min="1"></div>
+    <div class="row"><label>最小字寬 px</label><input type="number" id="minW" value="3" min="1"></div>
+    <div class="row"><label>最小像素數</label><input type="number" id="minPx" value="24" min="1"></div>
+    <div class="row"><label>字元順序</label></div>
+    <input type="text" id="charset" value="0123456789.,+-xX">
+    <div class="hint">由左到右依序對應。偵測到的格數要和字元數一樣才不會錯位。</div>
+    <div class="flexbar" style="margin-top:8px">
+      <button id="redetect">重新偵測</button>
+      <button id="splitMode">分割模式：關</button>
+    </div>
+    <div class="hint">分割模式開啟後，在字格上點一下就從該處切一刀。點字格可選取，選取後可 <kbd>Del</kbd> 刪除或按合併。</div>
+  </div>
+
+  <div class="grp">
+    <h2>3 · 輸出模式</h2>
+    <div class="seg" id="modeSeg">
+      <button data-mode="mono" class="on">等寬（滾分）</button>
+      <button data-mode="prop">不等寬</button>
+    </div>
+    <div class="row" style="margin-top:9px" id="rowCellW"><label>等寬字芯寬 px</label><input type="number" id="cellW"></div>
+    <div class="row"><label>畫布高 px</label><input type="number" id="cellH"></div>
+    <div class="row" id="rowOnlyDigits"><label>符號維持原寬</label><input type="checkbox" id="onlyDigits" checked></div>
+    <div class="row"><label>左右留白 px（排版間距）</label><input type="number" id="padX" value="2"></div>
+    <div class="row"><label>全部對齊偶數 px</label><input type="checkbox" id="evenSnap" checked></div>
+    <div class="row" id="rowSqueeze"><label>超寬字自動橫向壓縮</label><input type="checkbox" id="squeeze" checked></div>
+    <div class="row"><label>全域微調 X</label><input type="number" id="gdx" value="0"></div>
+    <div class="row"><label>全域微調 Y</label><input type="number" id="gdy" value="0"></div>
+    <div class="flexbar"><button id="autoFit" class="mini">重算建議寬高</button></div>
+    <div class="hint">等寬：字芯寬固定、字置中，滾分不會左右抽動。<br>
+      不等寬：寬度各自貼齊，高度統一維持基線。<br>
+      <b>最終畫布寬 = 字芯寬 + 留白×2</b>。Cocos 的 Layout / BitmapFont 都是緊貼排列，留白要切在圖裡。<br>
+      字芯寬調小 + 開啟自動壓縮 → 特別寬的字（例如 <code>0</code>）會橫向壓進去，整排就不會被它撐開。</div>
+  </div>
+
+  <div class="grp">
+    <h2>4 · 匯出</h2>
+    <div class="row"><label>檔名前綴</label><input type="text" id="prefix" value="" placeholder="例：num_ (可留空)" style="width:110px"></div>
+    <div class="row"><label>圖集最大寬 px</label><input type="number" id="sheetMax" value="1024"></div>
+    <button class="primary" id="exportBtn" style="width:100%;padding:10px">匯出 ZIP（PNG + JSON + Sheet）</button>
+    <div class="hint">內容：<br>pngs/ 逐字 PNG · font.json 字型設定 · sheet.png + sheet.json 合併圖集</div>
+  </div>
+
+</aside>
+
+<main>
+
+  <section class="card">
+    <h2>偵測結果</h2>
+    <div class="flexbar" style="margin-bottom:8px">
+      <span class="stat">縮放</span><input type="range" id="zoom" min="25" max="400" value="100"><span class="chip" id="zoomV">100%</span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="mini" id="mergeBtn">合併選取＋右鄰</button>
+      <button class="mini" id="delBtn">刪除選取</button>
+      <span class="stat" id="countInfo"></span>
+    </div>
+    <div class="canvasWrap" style="max-height:320px"><div id="detectHost"><canvas id="srcCv"></canvas><div id="boxes"></div></div></div>
+  </section>
+
+  <section class="card">
+    <h2>預覽</h2>
+    <div class="flexbar" style="margin-bottom:10px">
+      <input type="text" id="sample" value="1,234,567" style="width:180px">
+      <span class="stat">字距</span><input type="number" id="tracking" value="0" style="width:60px">
+      <span class="stat">縮放</span><input type="range" id="pzoom" min="25" max="300" value="100"><span class="chip" id="pzoomV">100%</span>
+      <span class="stat">背景</span><input type="color" id="bgc" value="#1b2b3a">
+      <button class="mini" id="tglBox">字格框線</button>
+      <button class="mini" id="tglBase">基線</button>
+      <button class="mini" id="tglRoll">滾分模擬</button>
+    </div>
+    <div id="previewWrap"><canvas id="previewCv"></canvas></div>
+    <div class="hint" id="previewInfo"></div>
+  </section>
+
+  <section class="card">
+    <h2>字格微調（px）</h2>
+    <div id="tuneWrap" style="border:1px solid var(--line);border-radius:6px;padding:8px;overflow:hidden">
+      <canvas id="tuneCv" style="display:block;image-rendering:pixelated"></canvas>
+    </div>
+    <div class="hint" style="margin:6px 0 8px">整組緊貼排列即時預覽（等同 Cocos <code>spacingX = 0</code>）。改數值立刻反映，<span style="color:var(--acc)">橘框</span>是編輯中的字。點進欄位後可用 <kbd>↑</kbd><kbd>↓</kbd> 一格一格推。</div>
+    <div class="flexbar" style="margin:0 0 10px;padding:8px;background:var(--panel2);border-radius:6px">
+      <span class="stat">以此字為基準</span>
+      <select id="refGlyph" style="width:70px"></select>
+      <button class="mini" id="applyW">寬度套用全部</button>
+      <button class="mini" id="applySW">寬度 % 套用全部</button>
+      <button class="mini" id="applyBox">框寬高套用全部</button>
+      <span style="flex:1"></span>
+      <button class="mini" id="resetAll">全部重設</button>
+    </div>
+    <div style="max-height:320px;overflow:auto">
+      <table id="tbl"><thead><tr>
+        <th style="width:40px">字元</th><th style="width:120px">檔名</th>
+        <th style="width:78px">原始 W×H</th><th style="width:86px">輸出 W×H</th>
+        <th style="width:58px">DX</th><th style="width:58px">DY</th>
+        <th style="width:66px">框寬 DW</th><th style="width:66px">框高 DH</th>
+        <th style="width:62px">寬度 %</th><th style="width:92px"></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+    <div class="hint">DX/DY 移動字在框內的位置；DW/DH 直接加減<b>輸出外框</b>的寬高；寬度 % 橫向縮放這個字本身（高度不變，基線不跑）。</div>
+  </section>
+
+</main>
+</div>
+
+<script>
+"use strict";
+/* ============================== 錯誤攔截 ============================== */
+window.addEventListener('error', ev=>{
+  const b=document.getElementById('statusBar');
+  if(b){ b.className='stat err'; b.textContent='JS 錯誤：'+ev.message+' (line '+ev.lineno+')'; }
+});
+/* ============================== 狀態 ============================== */
+const S = {
+  img:null, srcCv:null, sctx:null, data:null, W:0, H:0,
+  rows:[], rowIdx:0,
+  glyphs:[],          // {x,y,w,h,ch,name,dx,dy}
+  rowTop:0,rowBot:0,  // 目前行的整體上下界
+  baseBot:0,          // 數字基線（0-9 的最低點）
+  mode:'mono',
+  sel:-1, splitMode:false,
+  showBox:false, showBase:false, roll:false,
+  rollT0:0, raf:0, hl:-1,
+  cache:new Map()
+};
+const $ = id => document.getElementById(id);
+
+/* ============================== 檔名對照 ============================== */
+const NAME_MAP = {'.':'dot',',':'comma','+':'plus','-':'minus','x':'x_lower','X':'x_upper',
+  '$':'dollar','%':'percent',':':'colon','/':'slash','*':'star','=':'equal','(':'paren_l',')':'paren_r',
+  '#':'hash','!':'excl','?':'quest',' ':'space','~':'tilde','&':'amp','@':'at',"'":'quote','"':'dquote'};
+function glyphName(ch){
+  if(/^[0-9]$/.test(ch)) return ch;
+  if(NAME_MAP[ch]) return NAME_MAP[ch];
+  if(/^[a-z]$/.test(ch)) return ch+'_lower';
+  if(/^[A-Z]$/.test(ch)) return ch.toLowerCase()+'_upper';
+  return 'u'+ch.codePointAt(0).toString(16);
+}
+
+/* ============================== 載圖 ============================== */
+const drop = $('drop');
+drop.onclick = ()=>$('file').click();
+$('file').onchange = e => { if(e.target.files[0]) loadFile(e.target.files[0]); };
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('hot')}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('hot')}));
+drop.addEventListener('drop',e=>{e.stopPropagation(); const f=e.dataTransfer.files[0]; if(f) loadFile(f);});
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault(); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith('image/')) loadFile(f);});
+document.addEventListener('paste',e=>{
+  for(const it of (e.clipboardData?.items||[])){
+    if(it.type.startsWith('image/')){ loadFile(it.getAsFile()); e.preventDefault(); return; }
+  }
+});
+
+function loadFile(f){
+  const url = URL.createObjectURL(f);
+  const im = new Image();
+  im.onload = ()=>{ URL.revokeObjectURL(url); onImage(im, f.name); };
+  im.onerror = ()=>{ $('imgInfo').innerHTML='<span class="err">圖片讀取失敗</span>'; };
+  im.src = url;
+}
+function onImage(im, name){
+  S.img = im; S.W = im.naturalWidth; S.H = im.naturalHeight;
+  const cv = $('srcCv'); cv.width = S.W; cv.height = S.H;
+  S.srcCv = cv; S.sctx = cv.getContext('2d',{willReadFrequently:true});
+  S.sctx.clearRect(0,0,S.W,S.H); S.sctx.drawImage(im,0,0);
+  S.data = S.sctx.getImageData(0,0,S.W,S.H).data;
+  $('imgInfo').innerHTML = `<span class="ok">${name||'image'}</span> · ${S.W}×${S.H} px`;
+  detectRows();
+  S.rowIdx = 0;
+  detect(true);
+}
+
+/* ---- 內建測試圖：模擬 PS 輸出的一行去背美術字（各字寬度不一） ---- */
+$('demoBtn').onclick = ()=>{
+  const chars=[...'0123456789.,+-xX'];
+  const F='bold 90px "Arial Black", Impact, sans-serif';
+  const m=document.createElement('canvas').getContext('2d'); m.font=F;
+  const gap=26, padL=30, padT=40;
+  let w=padL; const xs=[];
+  for(const c of chars){ xs.push(w); w += Math.ceil(m.measureText(c).width) + gap; }
+  const cv=document.createElement('canvas'); cv.width=w+padL; cv.height=200;
+  const c=cv.getContext('2d');
+  c.font=F; c.textBaseline='alphabetic';
+  chars.forEach((ch,i)=>{
+    c.save();
+    c.shadowColor='rgba(0,0,0,.55)'; c.shadowOffsetX=5; c.shadowOffsetY=6; c.shadowBlur=3;
+    const grad=c.createLinearGradient(0,padT,0,padT+90);
+    grad.addColorStop(0,'#ffd24d'); grad.addColorStop(1,'#ff7a2f');
+    c.fillStyle=grad; c.fillText(ch,xs[i],padT+90);
+    c.restore();
+    c.lineWidth=3; c.strokeStyle='#8a3b0d'; c.strokeText(ch,xs[i],padT+90);
+  });
+  const im=new Image();
+  im.onload=()=>onImage(im,'demo-strip.png');
+  im.src=cv.toDataURL('image/png');
+};
+
+/* ============================== 偵測 ============================== */
+function evenOn(){ return $('evenSnap').checked; }
+function evenUp(n){ return evenOn() ? (n%2 ? n+1 : n) : n; }
+/* 把偵測到的框撐成偶數寬高（優先往右/下長，貼邊時改往左/上長） */
+function snapBox(o, preferLeft){
+  if(!o || !evenOn()) return o;
+  if(o.w%2){
+    if(preferLeft){ if(o.x>0){o.x--;o.w++;} else if(o.x+o.w<S.W) o.w++; }
+    else { if(o.x+o.w<S.W) o.w++; else if(o.x>0){o.x--;o.w++;} }
+  }
+  if(o.h%2){ if(o.y+o.h < S.H) o.h++; else if(o.y>0){ o.y--; o.h++; } }
+  return o;
+}
+function alphaAt(x,y){ return S.data[(y*S.W+x)*4+3]; }
+
+function detectRows(){
+  const th = +$('alphaTh').value;
+  const ink = new Uint8Array(S.H);
+  for(let y=0;y<S.H;y++){
+    for(let x=0;x<S.W;x++){ if(S.data[(y*S.W+x)*4+3]>=th){ ink[y]=1; break; } }
+  }
+  const groups=[]; let st=-1;
+  for(let y=0;y<=S.H;y++){
+    const v = y<S.H?ink[y]:0;
+    if(v&&st<0) st=y;
+    else if(!v&&st>=0){ groups.push([st,y-1]); st=-1; }
+  }
+  // 行間隙小於整體高度的 6% 就併為同一行
+  const gapTh = Math.max(6, Math.round(S.H*0.05));
+  const merged=[];
+  for(const g of groups){
+    if(merged.length && g[0]-merged[merged.length-1][1]-1 < gapTh) merged[merged.length-1][1]=g[1];
+    else merged.push(g.slice());
+  }
+  S.rows = merged.filter(g=>g[1]-g[0]+1 >= 4);
+  const sel=$('rowSel'); sel.innerHTML='';
+  S.rows.forEach((r,i)=>{ const o=document.createElement('option'); o.value=i;
+    o.textContent = `第 ${i+1} 行  (y ${r[0]}–${r[1]}, h ${r[1]-r[0]+1})`; sel.appendChild(o); });
+  sel.disabled = S.rows.length<2;
+}
+$('rowSel').onchange = e => { S.rowIdx = +e.target.value; detect(true); };
+function clampRow(){ if(S.rowIdx >= S.rows.length) S.rowIdx = Math.max(0,S.rows.length-1); $('rowSel').value = S.rowIdx; }
+
+function detect(resetCell){
+  if(!S.data) return;
+  const th=+$('alphaTh').value, minGap=+$('minGap').value, minW=+$('minW').value, minPx=+$('minPx').value;
+  const row = S.rows[S.rowIdx] || [0,S.H-1];
+  const y0=row[0], y1=row[1];
+
+  const colInk = new Uint8Array(S.W);
+  for(let x=0;x<S.W;x++){
+    for(let y=y0;y<=y1;y++){ if(S.data[(y*S.W+x)*4+3]>=th){ colInk[x]=1; break; } }
+  }
+  let raw=[], st=-1;
+  for(let x=0;x<=S.W;x++){
+    const v = x<S.W?colInk[x]:0;
+    if(v&&st<0) st=x;
+    else if(!v&&st>=0){ raw.push([st,x-1]); st=-1; }
+  }
+  const groups=[];
+  for(const g of raw){
+    if(groups.length && g[0]-groups[groups.length-1][1]-1 < minGap) groups[groups.length-1][1]=g[1];
+    else groups.push(g.slice());
+  }
+
+  const chars=[...$('charset').value];
+  const out=[];
+  for(const g of groups){
+    const gx0=g[0], gx1=g[1];
+    let top=1e9, bot=-1, px=0;
+    for(let y=y0;y<=y1;y++) for(let x=gx0;x<=gx1;x++){
+      if(S.data[(y*S.W+x)*4+3]>=th){ px++; if(y<top)top=y; if(y>bot)bot=y; }
+    }
+    if(gx1-gx0+1 < minW || px < minPx) continue;
+    out.push(snapBox({x:gx0,y:top,w:gx1-gx0+1,h:bot-top+1,px,ch:'',name:'',dx:0,dy:0,dw:0,dh:0,sw:100}));
+  }
+  out.forEach((g,i)=>{ g.ch = chars[i] ?? ''; g.name = g.ch? glyphName(g.ch) : 'glyph_'+i; });
+  S.glyphs = out;
+  recalcBounds();
+  if(resetCell) autoFit();
+  S.sel = -1;
+  refreshAll();
+}
+function recalcBounds(){
+  if(!S.glyphs.length){ S.rowTop=0;S.rowBot=0;S.baseBot=0; return; }
+  S.rowTop = Math.min(...S.glyphs.map(g=>g.y));
+  S.rowBot = Math.max(...S.glyphs.map(g=>g.y+g.h-1));
+  const digits = S.glyphs.filter(g=>/^[0-9]$/.test(g.ch));
+  S.baseBot = digits.length ? Math.max(...digits.map(g=>g.y+g.h-1)) : S.rowBot;
+}
+function autoFit(){
+  if(!S.glyphs.length) return;
+  const set = monoSet();
+  const maxW = Math.max(...(set.length?set:S.glyphs).map(g=>effW(g)));
+  $('cellW').value = evenUp(maxW);
+  $('cellH').value = evenUp(S.rowBot - S.rowTop + 1);
+}
+$('autoFit').onclick = ()=>{ autoFit(); refreshAll(); };
+function monoSet(){
+  return $('onlyDigits').checked ? S.glyphs.filter(g=>/^[0-9]$/.test(g.ch)) : S.glyphs.slice();
+}
+
+/* ============================== 輸出幾何 ============================== */
+function isMonoChar(g){
+  if(S.mode!=='mono') return false;
+  return $('onlyDigits').checked ? /^[0-9]$/.test(g.ch) : true;
+}
+/* 套用「寬度 %」後，這個字實際會被畫多寬 */
+function effW(g){ return Math.max(1, Math.round(g.w * ((g.sw ?? 100)/100))); }
+/* 再套用「超寬自動壓縮」後的最終繪製寬 */
+function drawW(g){
+  let w = effW(g);
+  if(isMonoChar(g) && $('squeeze').checked){
+    const core = +$('cellW').value || w;
+    if(w > core) w = core;
+  }
+  return w;
+}
+function isClipped(g){
+  if(!isMonoChar(g) || $('squeeze').checked) return false;
+  return effW(g) > (+$('cellW').value || effW(g));
+}
+function cellSize(g){
+  const cH = evenUp(+$('cellH').value || (S.rowBot-S.rowTop+1)) + (g.dh||0);
+  const p  = +$('padX').value||0;
+  const core = isMonoChar(g) ? (+$('cellW').value || effW(g)) : drawW(g);
+  return {w: evenUp(core + p*2) + (g.dw||0), h: cH};
+}
+function cellDraw(g){                       // 字在畫布內的落點（留白已含在 cw 裡）
+  const {w:cw,h:ch} = cellSize(g);
+  const rowH = S.rowBot - S.rowTop + 1;
+  const padY = Math.round((ch - rowH)/2);
+  const gdx = +$('gdx').value||0, gdy = +$('gdy').value||0;
+  const dw = drawW(g);
+  const x = Math.round((cw - dw)/2);
+  return { cw, ch, dw, dh:g.h, x: x + g.dx + gdx, y: padY + (g.y - S.rowTop) + g.dy + gdy };
+}
+function baselineInCell(){
+  const ch = evenUp(+$('cellH').value || (S.rowBot-S.rowTop+1));
+  const rowH = S.rowBot - S.rowTop + 1;
+  const padY = Math.round((ch - rowH)/2);
+  return padY + (S.baseBot - S.rowTop) + 1 + (+$('gdy').value||0);
+}
+function cacheKey(g){
+  const {w,h}=cellSize(g), d=cellDraw(g);
+  return [S.glyphs.indexOf(g),g.x,g.y,g.w,g.h,w,h,d.x,d.y,d.dw].join('|');
+}
+function glyphCanvas(g){
+  const k=cacheKey(g);
+  let c=S.cache.get(k);
+  if(!c){ c=renderGlyph(g); S.cache.set(k,c); if(S.cache.size>400) S.cache.clear(); }
+  return c;
+}
+function renderGlyph(g){
+  const d = cellDraw(g);
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1,d.cw); cv.height = Math.max(1,d.ch);
+  const c = cv.getContext('2d');
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  c.drawImage(S.srcCv, g.x, g.y, g.w, g.h, d.x, d.y, d.dw, d.dh);
+  return cv;
+}
+
+/* ============================== 偵測畫面 ============================== */
+$('zoom').oninput = e => { const z=+e.target.value/100; $('zoomV').textContent=e.target.value+'%';
+  $('detectHost').style.transform = `scale(${z})`;
+  $('detectHost').style.marginBottom = ((z-1)*S.H)+'px';
+  $('detectHost').style.marginRight = ((z-1)*S.W)+'px'; };
+
+function drawBoxes(){
+  const host=$('boxes'); host.innerHTML='';
+  const dup = new Set(); const seen=new Set();
+  S.glyphs.forEach(g=>{ if(g.name){ if(seen.has(g.name)) dup.add(g.name); seen.add(g.name);} });
+  S.glyphs.forEach((g,i)=>{
+    const d=document.createElement('div'); d.className='bx'+(i===S.sel?' sel':'');
+    d.style.left=g.x+'px'; d.style.top=g.y+'px'; d.style.width=g.w+'px'; d.style.height=g.h+'px';
+    d.innerHTML = `<span>${i+1} ${g.ch||'?'}${dup.has(g.name)?' ⚠':''}</span>`;
+    d.onclick = ev=>{
+      ev.stopPropagation();
+      if(S.splitMode){
+        const r=d.getBoundingClientRect();
+        const scale = r.width/g.w;
+        const cut = Math.round((ev.clientX - r.left)/scale);
+        splitAt(i, cut);
+      } else { S.sel = i; refreshAll(); }
+    };
+    host.appendChild(d);
+  });
+  $('countInfo').textContent = `偵測 ${S.glyphs.length} 格 / 字元 ${[...$('charset').value].length} 個`
+    + (S.glyphs.length!==[...$('charset').value].length?' ⚠ 數量不符':'');
+  $('countInfo').className = 'stat' + (S.glyphs.length!==[...$('charset').value].length?' err':' ok');
+}
+function splitAt(i,cut){
+  const g=S.glyphs[i];
+  if(cut<=1||cut>=g.w-1) return;
+  const th=+$('alphaTh').value;
+  const mk=(x0,w)=>{
+    let top=1e9,bot=-1,px=0;
+    for(let y=g.y;y<g.y+g.h;y++) for(let x=x0;x<x0+w;x++){
+      if(S.data[(y*S.W+x)*4+3]>=th){px++; if(y<top)top=y; if(y>bot)bot=y;}
+    }
+    if(bot<0) return null;
+    return {x:x0,y:top,w,h:bot-top+1,px,ch:'',name:'',dx:0,dy:0,dw:0,dh:0,sw:100};
+  };
+  const a=snapBox(mk(g.x,cut),true), b=snapBox(mk(g.x+cut,g.w-cut),false);
+  if(!a||!b) return;
+  S.glyphs.splice(i,1,a,b);
+  reassign(); recalcBounds(); refreshAll();
+}
+function reassign(){
+  S.glyphs.sort((p,q)=>p.x-q.x);
+  const chars=[...$('charset').value];
+  S.glyphs.forEach((g,i)=>{ g.ch = chars[i] ?? ''; g.name = g.ch? glyphName(g.ch) : 'glyph_'+i; });
+}
+$('mergeBtn').onclick = ()=>{
+  const i=S.sel; if(i<0||i>=S.glyphs.length-1) return;
+  const a=S.glyphs[i], b=S.glyphs[i+1];
+  const x=Math.min(a.x,b.x), y=Math.min(a.y,b.y);
+  const x2=Math.max(a.x+a.w,b.x+b.w), y2=Math.max(a.y+a.h,b.y+b.h);
+  S.glyphs.splice(i,2,snapBox({x,y,w:x2-x,h:y2-y,px:a.px+b.px,ch:'',name:'',dx:0,dy:0,dw:0,dh:0,sw:100}));
+  reassign(); recalcBounds(); refreshAll();
+};
+$('delBtn').onclick = ()=>{ if(S.sel<0) return; S.glyphs.splice(S.sel,1); S.sel=-1; reassign(); recalcBounds(); refreshAll(); };
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+  if((e.key==='Delete'||e.key==='Backspace')&&S.sel>=0){ e.preventDefault(); $('delBtn').click(); }
+});
+$('splitMode').onclick = ()=>{ S.splitMode=!S.splitMode;
+  $('splitMode').textContent='分割模式：'+(S.splitMode?'開':'關');
+  $('splitMode').classList.toggle('on',S.splitMode); };
+
+/* ============================== 表格 ============================== */
+function drawTable(){
+  const tb=$('tbl').querySelector('tbody'); tb.innerHTML='';
+  const seen={}; S.glyphs.forEach(g=>seen[g.name]=(seen[g.name]||0)+1);
+  S.glyphs.forEach((g,i)=>{
+    const {w:cw,h:ch}=cellSize(g);
+    const tr=document.createElement('tr');
+    tr.className = (i===S.sel?'sel ':'') + (seen[g.name]>1?'dup':'');
+    const eff=effW(g), clip=isClipped(g);
+    tr.innerHTML =
+      `<td><span class="chip">${g.ch||'?'}</span></td>`+
+      `<td><input type="text" data-k="name" data-i="${i}" value="${String(g.name).replace(/"/g,'&quot;')}"></td>`+
+      `<td class="stat">${g.w}×${g.h}${eff!==g.w?` <span style="color:var(--acc2)">→${eff}</span>`:''}</td>`+
+      `<td class="stat${clip?' err':''}">${cw}×${ch}${clip?' ✂':''}</td>`+
+      `<td><input type="number" data-k="dx" data-i="${i}" value="${g.dx}"></td>`+
+      `<td><input type="number" data-k="dy" data-i="${i}" value="${g.dy}"></td>`+
+      `<td><input type="number" data-k="dw" data-i="${i}" value="${g.dw||0}"></td>`+
+      `<td><input type="number" data-k="dh" data-i="${i}" value="${g.dh||0}"></td>`+
+      `<td><input type="number" data-k="sw" data-i="${i}" value="${g.sw??100}" min="10" max="300"></td>`+
+      `<td><button class="mini" data-sel="${i}">選取</button> <button class="mini" data-rst="${i}" title="這個字的 DX/DY/DW/DH/寬度% 全部歸零">↺</button></td>`;
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll('input').forEach(inp=>{
+    inp.onfocus = ()=>{ S.hl = +inp.dataset.i; drawTune(); };
+    inp.onblur  = ()=>{ S.hl = -1; drawTune(); };
+    inp.oninput = ()=>{
+      const g=S.glyphs[+inp.dataset.i], k=inp.dataset.k;
+      if(k==='name'){ g.name = inp.value; }
+      else if(k==='sw'){ const v=parseInt(inp.value,10); g.sw = Number.isFinite(v)? Math.min(300,Math.max(10,v)) : 100; }
+      else { g[k] = parseInt(inp.value,10)||0; }
+      // 尺寸類的改動要同步更新「輸出 W×H」欄
+      if(k==='dw'||k==='dh'||k==='sw'){
+        const row=inp.closest('tr'), s=cellSize(g), cl=isClipped(g);
+        row.children[3].textContent = `${s.w}×${s.h}${cl?' ✂':''}`;
+        row.children[3].className = 'stat'+(cl?' err':'');
+        row.children[2].innerHTML = `${g.w}×${g.h}`+(effW(g)!==g.w?` <span style="color:var(--acc2)">→${effW(g)}</span>`:'');
+      }
+      drawTune(); drawPreviewOnce(); drawBoxes();
+    };
+  });
+  tb.querySelectorAll('button[data-sel]').forEach(b=>b.onclick=()=>{S.sel=+b.dataset.sel; refreshAll();});
+  tb.querySelectorAll('button[data-rst]').forEach(b=>b.onclick=()=>{
+    const g=S.glyphs[+b.dataset.rst];
+    g.dx=0; g.dy=0; g.dw=0; g.dh=0; g.sw=100;
+    refreshAll();
+  });
+}
+$('resetAll').onclick = ()=>{
+  S.glyphs.forEach(g=>{ g.dx=0; g.dy=0; g.dw=0; g.dh=0; g.sw=100; });
+  $('gdx').value=0; $('gdy').value=0;
+  refreshAll();
+};
+
+/* ---- 以某個字為基準，套用到其他字 ---- */
+function fillRefSelect(){
+  const sel=$('refGlyph'), keep=sel.value;
+  sel.innerHTML='';
+  S.glyphs.forEach((g,i)=>{
+    const o=document.createElement('option');
+    o.value=i; o.textContent=`${g.ch||'?'}  (${cellSize(g).w}px)`;
+    sel.appendChild(o);
+  });
+  if(keep!=='' && +keep < S.glyphs.length) sel.value=keep;
+}
+function refGlyphObj(){ const i=+$('refGlyph').value; return S.glyphs[i]; }
+
+// 基準字的「輸出寬」套到全部
+$('applyW').onclick = ()=>{
+  const r=refGlyphObj(); if(!r) return;
+  const p=+$('padX').value||0;
+  if(S.mode==='mono'){
+    // 字芯寬 = 基準字實際畫出來的寬；其餘框寬微調歸零，超寬的字交給自動壓縮
+    $('cellW').value = evenUp(drawW(r));
+    S.glyphs.forEach(g=>g.dw=0);
+    if(!$('squeeze').checked) $('squeeze').checked = true;
+  }else{
+    // 不等寬模式：用框寬 DW 把每個字的輸出寬補到跟基準字一樣
+    const target = cellSize(r).w;
+    S.glyphs.forEach(g=>{ g.dw=0; g.dw = target - cellSize(g).w; });
+  }
+  refreshAll();
+};
+// 基準字的「寬度 %」套到全部
+$('applySW').onclick = ()=>{
+  const r=refGlyphObj(); if(!r) return;
+  const v=r.sw ?? 100;
+  S.glyphs.forEach(g=>g.sw=v);
+  refreshAll();
+};
+// 基準字的 DW / DH 套到全部
+$('applyBox').onclick = ()=>{
+  const r=refGlyphObj(); if(!r) return;
+  S.glyphs.forEach(g=>{ g.dw=r.dw||0; g.dh=r.dh||0; });
+  refreshAll();
+};
+
+/* ---- 微調用：整組緊貼即時預覽 ---- */
+function drawTune(){
+  const cv=$('tuneCv'), ctx=cv.getContext('2d');
+  if(!S.glyphs.length){ cv.width=10; cv.height=10; return; }
+  const cs=S.glyphs.map(g=>({g,c:glyphCanvas(g)}));
+  let W=0,H=0; cs.forEach(o=>{W+=o.c.width; H=Math.max(H,o.c.height);});
+  cv.width=Math.max(1,W); cv.height=Math.max(1,H);
+  ctx.fillStyle=$('bgc').value; ctx.fillRect(0,0,cv.width,cv.height);
+  let pen=0;
+  cs.forEach((o,i)=>{
+    ctx.drawImage(o.c,pen,0);
+    const on = i===S.hl || i===S.sel;
+    ctx.strokeStyle = on ? '#ff7a2f' : '#3fb6a855';
+    ctx.lineWidth = on ? 2 : 1;
+    ctx.strokeRect(pen+.5,.5,o.c.width-1,o.c.height-1);
+    pen+=o.c.width;
+  });
+  const host=$('tuneWrap');
+  const z=Math.min(1,(host.clientWidth-18)/cv.width);
+  cv.style.width=(cv.width*z)+'px'; cv.style.height=(cv.height*z)+'px';
+}
+window.addEventListener('resize',()=>{ if(S.glyphs.length) drawTune(); });
+
+/* ============================== 預覽 ============================== */
+$('pzoom').oninput = e=>{ $('pzoomV').textContent=e.target.value+'%'; drawPreviewOnce(); };
+['sample','tracking'].forEach(id=>$(id).oninput=drawPreviewOnce);
+$('bgc').oninput = ()=>{ drawPreviewOnce(); drawTune(); };
+$('tglBox').onclick = e=>{S.showBox=!S.showBox; e.target.classList.toggle('on',S.showBox); drawPreviewOnce();};
+$('tglBase').onclick = e=>{S.showBase=!S.showBase; e.target.classList.toggle('on',S.showBase); drawPreviewOnce();};
+$('tglRoll').onclick = e=>{
+  S.roll=!S.roll; e.target.classList.toggle('on',S.roll);
+  if(S.roll){ S.rollT0=performance.now(); loopRoll(); } else { cancelAnimationFrame(S.raf); drawPreviewOnce(); }
+};
+function loopRoll(){ drawPreviewOnce(); S.raf = requestAnimationFrame(loopRoll); }
+
+function findGlyph(ch){ return S.glyphs.find(g=>g.ch===ch); }
+
+function drawPreviewOnce(){
+  const cv=$('previewCv'), ctx=cv.getContext('2d');
+  const txt=$('sample').value, tr=+$('tracking').value||0;
+  if(!S.glyphs.length){ cv.width=10;cv.height=10; return; }
+
+  const gcv=glyphCanvas;
+
+  const items=[]; let totalW=0, maxH=0;
+  for(const ch of txt){
+    if(ch===' '){ const w=Math.round((+$('cellW').value||20)*0.5); items.push({space:true,w}); totalW+=w+tr; continue; }
+    const g=findGlyph(ch); if(!g){ items.push({miss:true,w:12,ch}); totalW+=12+tr; continue; }
+    const c=gcv(g); items.push({g,c,w:c.width}); totalW+=c.width+tr; maxH=Math.max(maxH,c.height);
+  }
+  totalW = Math.max(1,totalW-tr);
+  const PAD=20;
+  cv.width = totalW+PAD*2; cv.height = (maxH||20)+PAD*2;
+  ctx.fillStyle=$('bgc').value; ctx.fillRect(0,0,cv.width,cv.height);
+
+  // 滾分狀態
+  const now=performance.now(), el=now-S.rollT0, CYC=3200;
+  const t=el%CYC;
+  let digitIdx=0;
+  const digitsCv = '0123456789'.split('').map(d=>{const g=findGlyph(d); return g?gcv(g):null;});
+
+  let pen=PAD;
+  for(const it of items){
+    if(it.space){ pen+=it.w+tr; continue; }
+    if(it.miss){
+      ctx.strokeStyle='#ff6b6b'; ctx.strokeRect(pen+.5,PAD+.5,it.w-1,(maxH||20)-1);
+      ctx.fillStyle='#ff6b6b'; ctx.font='10px monospace'; ctx.fillText(it.ch,pen+2,PAD+12);
+      pen+=it.w+tr; continue;
+    }
+    const isDigit=/^[0-9]$/.test(it.g.ch);
+    let drawn=false;
+    if(S.roll && isDigit){
+      const stopAt = 700 + digitIdx*160;
+      digitIdx++;
+      if(t < stopAt){
+        const speed=0.010;
+        const phase=(t*speed)%1;
+        const base=Math.floor(t*speed)%10;
+        const a=digitsCv[base], b=digitsCv[(base+1)%10];
+        const H=it.c.height;
+        ctx.save(); ctx.beginPath(); ctx.rect(pen,PAD,it.w,H); ctx.clip();
+        if(a) ctx.drawImage(a, pen + (it.w-a.width)/2, PAD - phase*H);
+        if(b) ctx.drawImage(b, pen + (it.w-b.width)/2, PAD + (1-phase)*H);
+        ctx.restore(); drawn=true;
+      }
+    }
+    if(!drawn) ctx.drawImage(it.c, pen, PAD);
+    if(S.showBox){ ctx.strokeStyle='#3fb6a8aa'; ctx.lineWidth=1; ctx.strokeRect(pen+.5,PAD+.5,it.w-1,it.c.height-1); }
+    pen+=it.w+tr;
+  }
+  if(S.showBase){
+    const by=PAD+baselineInCell();
+    ctx.strokeStyle='#ffcc4d'; ctx.setLineDash([5,4]); ctx.beginPath();
+    ctx.moveTo(0,by+.5); ctx.lineTo(cv.width,by+.5); ctx.stroke(); ctx.setLineDash([]);
+  }
+  const z=+$('pzoom').value/100;
+  cv.style.width=(cv.width*z)+'px'; cv.style.height=(cv.height*z)+'px';
+
+  const widths=[...new Set(items.filter(i=>i.g&&/^[0-9]$/.test(i.g.ch)).map(i=>i.w))];
+  $('previewInfo').innerHTML = `整串 ${totalW} px · 字高 ${maxH} px · 數字畫布寬 ${widths.join(' / ')||'-'} px`
+    + (S.mode==='mono' && widths.length>1 ? ' <span class="err">⚠ 數字寬度不一致，滾分會抽動</span>' : '');
+}
+
+/* ============================== 參數綁定 ============================== */
+$('alphaTh').oninput = e=>{ $('alphaThV').textContent=e.target.value; detectRows(); clampRow(); detect(false); };
+['minGap','minW','minPx'].forEach(id=>$(id).oninput=()=>detect(false));
+$('charset').oninput = ()=>{ reassign(); recalcBounds(); refreshAll(); };
+$('redetect').onclick = ()=>detect(true);
+['cellW','cellH','padX','gdx','gdy'].forEach(id=>$(id).oninput=refreshAll);
+// 偶數模式下，離開欄位時把手打的奇數補成偶數
+['cellW','cellH'].forEach(id=>$(id).onchange=()=>{
+  const v=parseInt($(id).value,10);
+  if(evenOn() && Number.isFinite(v) && v%2){ $(id).value = v+1; }
+  refreshAll();
+});
+$('onlyDigits').onchange = refreshAll;
+$('squeeze').onchange = refreshAll;
+$('evenSnap').onchange = ()=>detect(true);
+document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); S.mode=b.dataset.mode;
+  const mono = S.mode==='mono';
+  $('rowOnlyDigits').style.display = mono?'':'none';
+  $('rowCellW').style.display = mono?'':'none';
+  $('rowSqueeze').style.display = mono?'':'none';
+  refreshAll();
+});
+
+function refreshAll(){
+  S.cache.clear();
+  drawBoxes(); drawTable(); fillRefSelect(); drawTune(); drawPreviewOnce();
+  const d0=S.glyphs.find(g=>/^[0-9]$/.test(g.ch));
+  const fin=d0?cellSize(d0):null;
+  $('statusBar').className='stat';
+  $('statusBar').textContent = S.glyphs.length
+    ? `${S.glyphs.length} 格 · ${S.mode==='mono'?'等寬':'不等寬'} · 數字輸出 ${fin?fin.w+'×'+fin.h:'-'} px`
+      + (evenOn()?' · 偶數對齊':'')
+    : '尚未載入圖片';
+}
+
+/* ============================== ZIP（store，無壓縮，離線可用） ============================== */
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;
+  for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+function crc32(u8){let c=0xFFFFFFFF;for(let i=0;i<u8.length;i++)c=CRC_T[(c^u8[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+function dosTime(d){return ((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()/2))&0xFFFF;}
+function dosDate(d){return (((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate())&0xFFFF;}
+function makeZip(files){
+  const enc=new TextEncoder(), now=new Date(), tm=dosTime(now), dt=dosDate(now);
+  const parts=[], central=[]; let off=0;
+  for(const f of files){
+    const nb=enc.encode(f.name), data=f.data, crc=crc32(data);
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true);
+    lh.setUint16(8,0,true); lh.setUint16(10,tm,true); lh.setUint16(12,dt,true);
+    lh.setUint32(14,crc,true); lh.setUint32(18,data.length,true); lh.setUint32(22,data.length,true);
+    lh.setUint16(26,nb.length,true); lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer),nb,data);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true);
+    ch.setUint16(8,0x0800,true); ch.setUint16(10,0,true); ch.setUint16(12,tm,true); ch.setUint16(14,dt,true);
+    ch.setUint32(16,crc,true); ch.setUint32(20,data.length,true); ch.setUint32(24,data.length,true);
+    ch.setUint16(28,nb.length,true); ch.setUint16(30,0,true); ch.setUint16(32,0,true);
+    ch.setUint16(34,0,true); ch.setUint16(36,0,true); ch.setUint32(38,0,true); ch.setUint32(42,off,true);
+    central.push(new Uint8Array(ch.buffer),nb);
+    off += 30+nb.length+data.length;
+  }
+  let cSize=0; central.forEach(p=>cSize+=p.length);
+  const eo=new DataView(new ArrayBuffer(22));
+  eo.setUint32(0,0x06054b50,true); eo.setUint16(4,0,true); eo.setUint16(6,0,true);
+  eo.setUint16(8,files.length,true); eo.setUint16(10,files.length,true);
+  eo.setUint32(12,cSize,true); eo.setUint32(16,off,true); eo.setUint16(20,0,true);
+  return new Blob([...parts,...central,new Uint8Array(eo.buffer)],{type:'application/zip'});
+}
+const cvToU8 = cv => new Promise(res=>cv.toBlob(b=>b.arrayBuffer().then(a=>res(new Uint8Array(a))),'image/png'));
+
+/* ============================== 匯出 ============================== */
+$('exportBtn').onclick = async ()=>{
+  if(!S.glyphs.length){ alert('還沒有偵測到任何字格'); return; }
+  const names=S.glyphs.map(g=>g.name.toLowerCase());
+  const dupes=names.filter((n,i)=>names.indexOf(n)!==i);
+  if(dupes.length && !confirm('檔名重複（Windows 不分大小寫）：'+[...new Set(dupes)].join(', ')+'\n仍要匯出嗎？')) return;
+
+  const btn=$('exportBtn'); btn.disabled=true; btn.textContent='打包中…';
+  try{
+    const prefix=$('prefix').value.trim();
+    const files=[];
+    const rendered=S.glyphs.map(g=>({g,cv:renderGlyph(g)}));
+
+    // 逐字 PNG
+    for(const r of rendered){
+      files.push({name:`pngs/${prefix}${r.g.name}.png`, data: await cvToU8(r.cv)});
+    }
+
+    // sprite sheet（shelf packing）
+    const maxW=Math.max(64,+$('sheetMax').value||1024);
+    const order=[...rendered].sort((a,b)=>b.cv.height-a.cv.height);
+    const GAP=2; let sx=GAP, sy=GAP, shelfH=0, usedW=0; const frames=new Map();
+    for(const r of order){
+      if(sx + r.cv.width + GAP > maxW && sx>GAP){ sx=GAP; sy+=shelfH+GAP; shelfH=0; }
+      frames.set(r.g,{x:sx,y:sy,w:r.cv.width,h:r.cv.height});
+      sx += r.cv.width+GAP; shelfH=Math.max(shelfH,r.cv.height); usedW=Math.max(usedW,sx);
+    }
+    const sheetH=sy+shelfH+GAP;
+    const sheet=document.createElement('canvas'); sheet.width=Math.max(1,usedW); sheet.height=Math.max(1,sheetH);
+    const sc=sheet.getContext('2d');
+    for(const r of rendered){ const f=frames.get(r.g); sc.drawImage(r.cv,f.x,f.y); }
+    files.push({name:'sheet.png', data: await cvToU8(sheet)});
+
+    // font.json
+    const cW=+$('cellW').value||0, cH=+$('cellH').value||0;
+    const font={
+      generatedBy:'slot-glyph-slicer',
+      generatedAt:new Date().toISOString(),
+      source:{width:S.W,height:S.H,row:S.rows[S.rowIdx]||null},
+      mode:S.mode, monospaceDigitsOnly:$('onlyDigits').checked,
+      cell:{coreWidth:cW, height:cH, padX:+$('padX').value||0, evenSnap:evenOn()},
+      baseline: baselineInCell(),
+      tracking:+$('tracking').value||0,
+      globalOffset:{x:+$('gdx').value||0,y:+$('gdy').value||0},
+      settings:{
+        alphaThreshold:+$('alphaTh').value, minGap:+$('minGap').value,
+        minWidth:+$('minW').value, minPixels:+$('minPx').value,
+        charset:$('charset').value, padX:+$('padX').value||0,
+        evenSnap:evenOn(), squeezeOverflow:$('squeeze').checked, prefix:prefix
+      },
+      glyphs:S.glyphs.map(g=>{
+        const s=cellSize(g), d=cellDraw(g), f=frames.get(g);
+        return {char:g.ch, name:g.name, file:`pngs/${prefix}${g.name}.png`,
+          width:s.w, height:s.h, advance:s.w,
+          trimmed:{w:g.w,h:g.h}, drawn:{w:d.dw,h:d.dh}, scaleX:(g.sw??100)/100,
+          boxDelta:{w:g.dw||0,h:g.dh||0}, nudge:{x:g.dx,y:g.dy},
+          drawOffset:{x:d.x,y:d.y},
+          source:{x:g.x,y:g.y,w:g.w,h:g.h},
+          sheet:{x:f.x,y:f.y,w:f.w,h:f.h}};
+      })
+    };
+    const enc=new TextEncoder();
+    files.push({name:'font.json', data: enc.encode(JSON.stringify(font,null,2))});
+    files.push({name:'sheet.json', data: enc.encode(JSON.stringify({
+      image:'sheet.png', size:{w:sheet.width,h:sheet.height},
+      frames:Object.fromEntries(S.glyphs.map(g=>{const f=frames.get(g); return [g.name,{x:f.x,y:f.y,w:f.w,h:f.h}];}))
+    },null,2))});
+
+    const blob=makeZip(files);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`slotfont_${S.mode}_${new Date().toISOString().slice(0,10)}.zip`;
+    a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  }catch(err){ alert('匯出失敗：'+err.message); console.error(err); }
+  finally{ btn.disabled=false; btn.textContent='匯出 ZIP（PNG + JSON + Sheet）'; }
+};
+</script>
+</body>
+</html>
